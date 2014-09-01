@@ -58,7 +58,8 @@
 			"DEFAULT_ADAPT_LEVEL": 2,
 			"CLI_INTERPRETER_NAMESPACE_PATTERN": /cli-((?:[a-z][a-z0-9]*-?)*[a-z][a-z0-9]*)$/,
 			"EVENT": {
-				"PROMPT_STRING_MODIFIED": "prompt-string-modified"
+				"PROMPT_STRING_MODIFIED": "prompt-string-modified",
+				"LINE_STRING_MODIFIED": "line-string-modified"
 			}
 		}
 	@end-class-constant
@@ -78,7 +79,8 @@ var CLI = function CLI( promptString, workingDirectory ){
 };
 
 CLI.EVENT = {
-	"PROMPT_STRING_MODIFIED": "prompt-string-modified"
+	"PROMPT_STRING_MODIFIED": "prompt-string-modified",
+	"LINE_STRING_MODIFIED": "line-string-modified"
 };
 
 CLI.DEFAULT_PROMPT_STRING = ">";
@@ -232,11 +234,11 @@ CLI.prototype.configure = function configure( promptString, workingDirectory ){
 		@end-meta-configuration
 	*/
 
-    this.searchAllInterpreterEngine( );
+	this.searchAllInterpreterEngine( );
 
-    this.includeAllInterpreterEngine( );
+	this.includeAllInterpreterEngine( );
 
-    process.stdin.pipe( this ).pipe( process.stdout );
+	process.stdin.pipe( this ).pipe( process.stdout );
 
 	return this;
 };
@@ -514,9 +516,12 @@ CLI.prototype.constructCommandLineInterface = function constructCommandLineInter
 
 	commandLineInterface.on( "line",
 		function onLine( line ){
-			line = line.trim( );
+			self.emit( EVENT.LINE_STRING_MODIFIED, line );
 
-			self.emit( "", line );
+			if( typeof commandLineNamespace == "string" ){
+				var eventNamespace = [ EVENT.LINE_STRING_MODIFIED, commandLineNamespace ].join( ":" );
+				self.emit( eventNamespace, line );
+			}
 
 			commandLineInterface.prompt( );
 		} );
@@ -548,7 +553,8 @@ const DEFAULT_WORKING_DIRECTORY = "../../";
 const DEFAULT_ENVIRONMENT_ADAPT_LEVEL = 2;
 const CLI_INTERPRETER_NAMESPACE_PATTERN = /cli-((?:[a-z][a-z0-9]*-?)*[a-z][a-z0-9]*)$/;
 const EVENT = {
-	"PROMPT_STRING_MODIFIED": "prompt-string-modified"
+	"PROMPT_STRING_MODIFIED": "prompt-string-modified",
+	"LINE_STRING_MODIFIED": "line-string-modified"
 };
 
 util.inherits( CLI, events.EventEmitter );
