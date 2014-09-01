@@ -1,0 +1,557 @@
+/*:
+	@module-license:
+		The MIT License (MIT)
+
+		Copyright (c) 2014 Richeve Siodina Bebedor
+
+		Permission is hereby granted, free of charge, to any person obtaining a copy
+		of this software and associated documentation files (the "Software"), to deal
+		in the Software without restriction, including without limitation the rights
+		to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+		copies of the Software, and to permit persons to whom the Software is
+		furnished to do so, subject to the following conditions:
+
+		The above copyright notice and this permission notice shall be included in all
+		copies or substantial portions of the Software.
+
+		THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+		IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+		FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+		AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+		LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+		OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+		SOFTWARE.
+	@end-module-license
+
+	@module-configuration:
+		{
+			 "packageName": "class-cli",
+			 "fileName": "class-cli.js",
+			 "moduleName": "CLI",
+			 "className": "CLI",
+			 "authorName": "Richeve S. Bebedor",
+			 "authorEMail": "richeve.bebedor@gmail.com",
+			 "repository": "git@github.com:volkovasystems/class-cli.git",
+			 "testCase": "class-cli-test.js",
+			 "isGlobal": true
+		}
+	@end-module-configuration
+
+	@module-documentation:
+
+	@end-module-documentation
+
+	@include:
+		{
+			"util@nodejs": "util",
+			"events@nodejs": "events",
+			"readline@nodejs": "readline",
+			"fs@nodejs": "fs",
+			"path@nodejs": "path"
+		}
+	@end-include
+
+	@class-constant:
+		{
+			"DEFAULT_PROMPT_STRING": ">",
+			"DEFAULT_WORKING_DIRECTORY": "../../",
+			"DEFAULT_ADAPT_LEVEL": 2,
+			"CLI_INTERPRETER_NAMESPACE_PATTERN": /cli-((?:[a-z][a-z0-9]*-?)*[a-z][a-z0-9]*)$/,
+			"EVENT": {
+				"PROMPT_STRING_MODIFIED": "prompt-string-modified"
+			}
+		}
+	@end-class-constant
+*/
+var CLI = function CLI( promptString, workingDirectory ){
+	/*:
+		@meta-configuration:
+			{
+				"promptString:optional": "string",
+				"workingDirectory:optional": "string"
+			}
+		@end-meta-configuration
+	*/
+
+	this.initialize.call( this, promptString, workingDirectory );
+	this.configure.call( this, promptString, workingDirectory );
+};
+
+CLI.EVENT = {
+	"PROMPT_STRING_MODIFIED": "prompt-string-modified"
+};
+
+CLI.DEFAULT_PROMPT_STRING = ">";
+
+CLI.DEFAULT_WORKING_DIRECTORY = "../../";
+
+CLI.DEFAULT_ENVIRONMENT_ADAPT_LEVEL = 2;
+
+CLI.CLI_INTERPRETER_NAMESPACE_PATTERN = /cli-((?:[a-z][a-z0-9]*-?)*[a-z][a-z0-9]*)$/;
+
+/*:
+	@property-configuration:
+		{
+			"propertyNamespace": "promptString",
+			"propertyType": "string",
+			"hasDefaultValue": true
+		}
+	@end-property-configuration
+
+	@property-documentation:
+	@end-property-documentation
+*/
+CLI.prototype.promptString = CLI.DEFAULT_PROMPT_STRING;
+
+/*:
+	@property-configuration:
+		{
+			"propertyNamespace": "promptStringList",
+			"propertyType": "List"
+		}
+	@end-property-configuration
+
+	@property-documentation:
+	@end-property-documentation
+*/
+CLI.prototype.promptStringList = [ ];
+
+/*:
+	@property-configuration:
+		{
+			"propertyNamespace": "workingDirectory",
+			"propertyType": "string",
+			"hasDefaultValue": true
+		}
+	@end-property-configuration
+
+	@property-documentation:
+	@end-property-documentation
+*/
+CLI.prototype.workingDirectory = CLI.DEFAULT_WORKING_DIRECTORY;
+
+/*:
+	@property-configuration:
+		{
+			"propertyNamespace": "environmentAdaptLevel",
+			"propertyType": "number",
+			"hasDefaultValue": true
+		}
+	@end-property-configuration
+
+	@property-documentation:
+	@end-property-documentation
+*/
+CLI.prototype.environmentAdaptLevel = CLI.DEFAULT_ENVIRONMENT_ADAPT_LEVEL;
+
+/*:
+	@property-configuration:
+		{
+			"propertyNamespace": "cliInterpreterList",
+			"propertyType": "List"
+		}
+	@end-property-configuration
+
+	@property-documentation:
+	@end-property-documentation
+*/
+CLI.prototype.cliInterpreterList = [ ];
+
+/*:
+	@property-configuration:
+		{
+			"propertyNamespace": "cliInterpreterEngineSet",
+			"propertyType": "Set"
+		}
+	@end-property-configuration
+
+	@property-documentation:
+	@end-property-documentation
+*/
+CLI.prototype.cliInterpreterEngineSet = { };
+
+/*:
+	@property-configuration:
+		{
+			"propertyNamespace": "commandLineInterfaceSet",
+			"propertyType": "Set"
+		}
+	@end-property-configuration
+
+	@property-documentation:
+	@end-property-documentation
+*/
+CLI.prototype.commandLineInterfaceSet = { };
+
+/*:
+	@method-configuration:
+		{
+
+		}
+	@end-method-configuration
+
+	@method-documentation:
+	@end-method-documentation
+*/
+CLI.prototype.initialize = function initialize( promptString, workingDirectory ){
+	/*:
+		@meta-configuration:
+			{
+				"promptString:optional": "string",
+				"workingDirectory:optional": "string"
+			}
+		@end-meta-configuration
+	*/
+
+	this.setPromptString( promptString );
+
+	this.setWorkingDirectory( workingDirectory );
+
+	this.setMaxListeners( 0 );
+
+	return this;
+};
+
+/*:
+	@method-configuration:
+		{
+
+		}
+	@end-method-configuration
+
+	@method-documentation:
+	@end-method-documentation
+*/
+CLI.prototype.configure = function configure( promptString, workingDirectory ){
+	/*:
+		@meta-configuration:
+			{
+				"promptString:optional": "string",
+				"workingDirectory:optional": "string"
+			}
+		@end-meta-configuration
+	*/
+
+    this.searchAllInterpreterEngine( );
+
+    this.includeAllInterpreterEngine( );
+
+    process.stdin.pipe( this ).pipe( process.stdout );
+
+	return this;
+};
+
+/*:
+	@method-configuration:
+		{
+
+		}
+	@end-method-configuration
+
+	@method-documentation:
+	@end-method-documentation
+*/
+CLI.prototype.setPromptString = function setPromptString( promptString ){
+	/*:
+		@meta-configuration:
+			{
+				"promptString:optional": "string",
+				"workingDirectory:optional": "string"
+			}
+		@end-meta-configuration
+	*/
+
+	this.promptString = promptString || this.promptString || DEFAULT_PROMPT_STRING;
+	this.promptStringList.splice( 0, 2, this.promptString, " " );
+
+	this.emit( EVENT.PROMPT_STRING_MODIFIED );
+
+	return this;
+};
+
+/*:
+	@method-configuration:
+		{
+
+		}
+	@end-method-configuration
+
+	@method-documentation:
+	@end-method-documentation
+*/
+CLI.prototype.prependPromptString = function prependPromptString( promptString ){
+	/*:
+		@meta-configuration:
+			{
+				"promptString:optional": "string"
+			}
+		@end-meta-configuration
+	*/
+
+	this.promptStringList.splice( 0, 0, promptString );
+
+	this.emit( EVENT.PROMPT_STRING_MODIFIED );
+
+	return this;
+};
+
+/*:
+	@method-configuration:
+		{
+
+		}
+	@end-method-configuration
+
+	@method-documentation:
+	@end-method-documentation
+*/
+CLI.prototype.resetPromptString = function resetPromptString( ){
+	while( this.promptStringList.pop( ), this.promptStringList.length );
+
+	this.setPromptString( this.promptString );
+
+	return this;
+};
+
+/*:
+	@method-configuration:
+		{
+
+		}
+	@end-method-configuration
+
+	@method-documentation:
+	@end-method-documentation
+*/
+CLI.prototype.formatPromptString = function formatPromptString( ){
+	var formatArgumentList = [ 0, 0 ].concat( Array.prototype.slice.call( arguments ) );
+
+	this.resetPromptString( );
+	Array.prototype.splice.apply( this.promptStringList, formatArgumentList );
+
+	this.emit( EVENT.PROMPT_STRING_MODIFIED );
+
+	return this;
+};
+
+/*:
+	@method-configuration:
+		{
+
+		}
+	@end-method-configuration
+
+	@method-documentation:
+	@end-method-documentation
+*/
+CLI.prototype.setWorkingDirectory = function setWorkingDirectory( workingDirectory ){
+	/*:
+		@meta-configuration:
+			{
+				"workingDirectory:optional": "string"
+			}
+		@end-meta-configuration
+	*/
+
+	workingDirectory = workingDirectory || this.workingDirectory || DEFAULT_WORKING_DIRECTORY;
+
+	if( fs.existsSync( workingDirectory ) &&
+		fs.statSync( workingDirectory ).isDirectory( ) )
+	{
+		this.workingDirectory = workingDirectory;
+
+		process.chdir( this.workingDirectory );
+
+	}else{
+		var error = new Error( "fatal:given working directory is not existing" );
+		console.error( error );
+		throw error;
+	}
+
+	return this;
+};
+
+/*:
+	@method-configuration:
+		{
+
+		}
+	@end-method-configuration
+
+	@method-documentation:
+	@end-method-documentation
+*/
+CLI.prototype.setEnvironmentAdaptationLevel = function setEnvironmentAdaptationLevel( level ){
+	/*:
+		@meta-configuration:
+			{
+				"level:optional": "number"
+			}
+		@end-meta-configuration
+	*/
+
+	this.environmentAdaptLevel = level || this.environmentAdaptLevel || DEFAULT_ENVIRONMENT_ADAPT_LEVEL;
+
+	return this;
+};
+
+CLI.prototype.adaptWorkingEnvironment = function adaptWorkingEnvironment( level ){
+	/*:
+		@meta-configuration:
+			{
+				"level:optional": "number"
+			}
+		@end-meta-configuration
+	*/
+
+	this.setEnvironmentAdaptationLevel( level );
+
+	this.adaptedWorkingEnvironment = module.filename.split( path.sep ).reverse( ).slice( this.environmentAdaptLevel ).reverse( ).join( path.sep );
+
+	this.setWorkingDirectory( this.adaptedWorkingEnvironment );
+
+	return this;
+};
+
+CLI.prototype.setCLIInterpreterList = function setCLIIntepreterList( interpreterList ){
+	while(
+		this.cliInterpreterList.pop( ),
+		this.cliInterpreterList.length
+	);
+
+	while(
+		this.cliInterpreterList.push( interpreterList.pop( ) ),
+		interpreterList.length
+	);
+
+	return this;
+};
+
+CLI.prototype.searchAllInterpreterEngine = function searchAllInterpreterEngine( ){
+	//: Since we are now inside the working directory, we will assume other cli modules reside on this directory.
+	var workingDirectory = process.cwd( );
+
+	var directoryList = fs.readdirSync( workingDirectory );
+
+	var directoryPath = null;
+	var cliInterpreterList = [ ];
+	var cliInterpreterNamespace = null;
+	var cliInterpreterEngineFilePath = null;
+
+	//: We will read any modules that pass the cli interpreter namespace pattern.
+	var directoryListLength = directoryList.length;
+	for( var index = 0; index < directoryListLength; index++ ){
+		directoryPath = directoryList[ index ];
+
+		if( fs.statSync( directoryPath ).isDirectory( ) &&
+			CLI_INTERPRETER_NAMESPACE_PATTERN.test( directoryPath ) )
+		{
+			cliInterpreterNamespace = directoryPath.match( CLI_INTERPRETER_NAMESPACE_PATTERN )[ 0 ];
+			cliInterpreterEngineFilePath = [ workingDirectory, directoryPath, cliInterpreterNamespace + ".js" ].join( path.sep );
+			cliInterpreterList.push( cliInterpreterEngineFilePath );
+		}
+	}
+
+	this.setCLIInterpreterList( cliInterpreterList );
+
+	return this;
+};
+
+CLI.prototype.setCLIInterpreterEngineSet = function setCLIInterpreterEngineSet( interpreterEngineSet ){
+	for( var interpreterName in interpreterEngineSet ){
+		this.cliInterpreterEngineSet[ interpreterName ] = interpreterEngineSet[ interpreterName ];
+	}
+
+	return this;
+};
+
+CLI.prototype.includeAllInterpreterEngine = function includeAllInterpreterEngine( ){
+	var cliInterpreterEngineSet = { };
+	var cliInterpreterEngineNamespace = null;
+	var cliInterpreterEngineFilePath = null;
+
+	//: All passed cli interpreter modules will then be required.
+	var cliInterpreterListLength = cliInterpreterList.length;
+	for( var index = 0; index < cliInterpreterListLength; index++ ){
+		cliInterpreterEngineFilePath = cliInterpreterList[ index ];
+
+		cliInterpreterEngineNamespace = cliInterpreterEngineFilePath.split( ".js" )[ 0 ].match( CLI_INTERPRETER_NAMESPACE_PATTERN )[ 1 ];
+
+		if( fs.existsSync( cliInterpreterEngineFilePath ) &&
+			fs.statSync( cliInterpreterEngineFilePath ).isFile( ) )
+		{
+			try{
+				cliInterpreterEngineSet[ cliInterpreterEngineNamespace ] = require( cliInterpreterEngineFilePath );
+
+			}catch( error ){
+				console.warn( "error encountered during CLI interpreter engine inclusion" );
+				console.warn( "please check each CLI interpreter module for possible cause of error" );
+				console.error( error );
+			}
+		}
+	}
+
+	this.setCLIInterpreterEngineSet( cliInterpreterEngineSet );
+
+	return this;
+};
+
+CLI.prototype.constructCommandLineInterface = function constructCommandLineInterface( commandLineNamespace ){
+	var self = this;
+
+	var commandLineInterface = readline.createInterface( {
+		"input": this,
+		"output": this,
+		"terminal": true
+	} );
+
+	commandLineInterface.setPrompt( this.promptStringList.join( "" ) );
+
+	this.on( EVENT.PROMPT_STRING_MODIFIED,
+		function onPromptStringModified( ){
+			commandLineInterface.setPrompt( self.promptStringList.join( "" ) );
+		} );
+
+	commandLineInterface.on( "line",
+		function onLine( line ){
+			line = line.trim( );
+
+			self.emit( "", line );
+
+			commandLineInterface.prompt( );
+		} );
+
+	if( typeof commandLineNamespace == "string" ){
+		this.commandLineInterfaceSet[ commandLineNamespace ] = commandLineInterface;
+	}
+
+	return commandLineInterface;
+};
+
+CLI.prototype._read = function read( size ){
+
+};
+
+CLI.prototype._write = function write( chunk, encoding, callback ){
+
+};
+
+var util = require( "util" );
+var events = require( "events" );
+var readline = require( "readline" );
+var fs = require( "fs" );
+var path = require( "path" );
+var stream = require( "stream" );
+
+const DEFAULT_PROMPT_STRING = ">";
+const DEFAULT_WORKING_DIRECTORY = "../../";
+const DEFAULT_ENVIRONMENT_ADAPT_LEVEL = 2;
+const CLI_INTERPRETER_NAMESPACE_PATTERN = /cli-((?:[a-z][a-z0-9]*-?)*[a-z][a-z0-9]*)$/;
+const EVENT = {
+	"PROMPT_STRING_MODIFIED": "prompt-string-modified"
+};
+
+util.inherits( CLI, events.EventEmitter );
+util.inherits( CLI, stream.Duplex );
+
+module.exports = CLI;
