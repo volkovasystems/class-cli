@@ -44,7 +44,6 @@
 	@include:
 		{
 			"util@nodejs": "util",
-			"events@nodejs": "events",
 			"readline@nodejs": "readline",
 			"fs@nodejs": "fs",
 			"path@nodejs": "path"
@@ -59,7 +58,8 @@
 			"CLI_INTERPRETER_NAMESPACE_PATTERN": /cli-((?:[a-z][a-z0-9]*-?)*[a-z][a-z0-9]*)$/,
 			"EVENT": {
 				"PROMPT_STRING_MODIFIED": "prompt-string-modified",
-				"LINE_STRING_MODIFIED": "line-string-modified"
+				"LINE_STRING_MODIFIED": "line-string-modified",
+				"LINE_STRING_INJECTED": "line-string-injected"
 			}
 		}
 	@end-class-constant
@@ -80,7 +80,8 @@ var CLI = function CLI( promptString, workingDirectory ){
 
 CLI.EVENT = {
 	"PROMPT_STRING_MODIFIED": "prompt-string-modified",
-	"LINE_STRING_MODIFIED": "line-string-modified"
+	"LINE_STRING_MODIFIED": "line-string-modified",
+    "LINE_STRING_INJECTED": "line-string-injected"
 };
 
 CLI.DEFAULT_PROMPT_STRING = ">";
@@ -534,7 +535,11 @@ CLI.prototype.constructCommandLineInterface = function constructCommandLineInter
 };
 
 CLI.prototype._read = function read( size ){
-
+    var self = this;
+    this.on( EVENT.LINE_STRING_INJECTED,
+        function onLineStringInjected( injectedLine ){
+            self.push( injectedLine );
+        } );
 };
 
 CLI.prototype._write = function write( chunk, encoding, callback ){
@@ -542,7 +547,6 @@ CLI.prototype._write = function write( chunk, encoding, callback ){
 };
 
 var util = require( "util" );
-var events = require( "events" );
 var readline = require( "readline" );
 var fs = require( "fs" );
 var path = require( "path" );
@@ -554,10 +558,10 @@ const DEFAULT_ENVIRONMENT_ADAPT_LEVEL = 2;
 const CLI_INTERPRETER_NAMESPACE_PATTERN = /cli-((?:[a-z][a-z0-9]*-?)*[a-z][a-z0-9]*)$/;
 const EVENT = {
 	"PROMPT_STRING_MODIFIED": "prompt-string-modified",
-	"LINE_STRING_MODIFIED": "line-string-modified"
+	"LINE_STRING_MODIFIED": "line-string-modified",
+    "LINE_STRING_INJECTED": "line-string-injected"
 };
 
-util.inherits( CLI, events.EventEmitter );
 util.inherits( CLI, stream.Duplex );
 
 module.exports = CLI;
