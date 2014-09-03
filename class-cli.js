@@ -831,7 +831,7 @@ CLI.prototype.bindAllCLIInterpreterEngine = function bindAllCLIInterpreterEngine
 	for( var cliInterpreterName in cliInterpreterEngineSet ){
 		cliInterpreterEngine = cliInterpreterEngineSet[ cliInterpreterName ];
 
-		cliInterpreterEngine.call( this );
+		cliInterpreterEngine.call( this, CLI );
 	}
 };
 
@@ -872,11 +872,11 @@ CLI.prototype.constructCommandLineInterface = function constructCommandLineInter
 	commandLineInterface.on( "line",
 		function onLine( line ){
 
-			self.emit( EVENT.LINE_STRING_MODIFIED, line );
+			self.emit( EVENT.LINE_STRING_MODIFIED, line, commandLineInterface );
 
 			if( typeof commandLineNamespace == "string" ){
 				var eventNamespace = [ EVENT.LINE_STRING_MODIFIED, commandLineNamespace ].join( ":" );
-				self.emit( eventNamespace, line );
+				self.emit( eventNamespace, line, commandLineInterface );
 			}
 
 			commandLineInterface.prompt( );
