@@ -53,6 +53,7 @@
 	@class-constant:
 		{
 			"DEFAULT_PROMPT_STRING": ">",
+			"DEFAULT_PROMPT_STRING_SEPARATOR": "",
 			"DEFAULT_WORKING_DIRECTORY": "../../",
 			"DEFAULT_ADAPT_LEVEL": 2,
 			"CLI_INTERPRETER_NAMESPACE_PATTERN": /cli-((?:[a-z][a-z0-9]*-?)*[a-z][a-z0-9]*)$/,
@@ -60,7 +61,9 @@
 				"PROMPT_STRING_MODIFIED": "prompt-string-modified",
 				"LINE_STRING_MODIFIED": "line-string-modified",
 				"LINE_STRING_INJECTED": "line-string-injected",
-				"LINE_STRING_FLOWED": "line-string-flowed"
+				"LINE_STRING_FLOWED": "line-string-flowed",
+                "FLOWING_LINE_STRING_STOPPED": "flowing-line-string-stopped",
+                "WORKING_ENVIRONMENT_CHANGED": "working-environment-changed"
 			}
 		}
 	@end-class-constant
@@ -71,7 +74,7 @@
 	@class-constructor-documentation:
 	@end-class-constructor-documentation
 */
-var CLI = function CLI( promptString, workingDirectory, streamOption ){
+var CLI = function CLI( promptString, workingDirectory ){
 	/*:
 		@meta-configuration:
 			{
@@ -81,12 +84,7 @@ var CLI = function CLI( promptString, workingDirectory, streamOption ){
 			}
 		@end-meta-configuration
 	*/
-	if( typeof streamOption != "object" ){
-		streamOption = { };
-	}
 
-	stream.Duplex.call( this, streamOption );
-	
 	this.initialize.call( this, promptString, workingDirectory );
 	this.configure.call( this, promptString, workingDirectory );
 };
@@ -133,8 +131,35 @@ CLI.EVENT = {
 		@class-event-constant-documentation:
 		@end-class-event-constant-documentation
 	*/
-	"LINE_STRING_FLOWED": "line-string-flowed"
+	"LINE_STRING_FLOWED": "line-string-flowed",
+
+    /*:
+     @class-event-constant-configuration:
+     @end-class-constant-configuration
+
+     @class-event-constant-documentation:
+     @end-class-event-constant-documentation
+     */
+    "FLOWING_LINE_STRING_STOPPED": "flowing-line-string-stopped",
+
+    /*:
+     @class-event-constant-configuration:
+     @end-class-constant-configuration
+
+     @class-event-constant-documentation:
+     @end-class-event-constant-documentation
+     */
+    "WORKING_ENVIRONMENT_CHANGED": "working-environment-changed"
 };
+
+/*:
+    @class-constant-configuration:
+    @end-class-constant-configuration
+
+    @class-constant-documentation:
+    @end-class-constant-documentation
+*/
+CLI.DEFAULT_PROMPT_STRING_SEPARATOR = "";
 
 /*:
 	@class-constant-configuration:
@@ -171,6 +196,19 @@ CLI.DEFAULT_ENVIRONMENT_ADAPT_LEVEL = 2;
 	@end-class-constant-documentation
 */
 CLI.CLI_INTERPRETER_NAMESPACE_PATTERN = /cli-((?:[a-z][a-z0-9]*-?)*[a-z][a-z0-9]*)$/;
+
+/*:
+    @property-configuration:
+        {
+            "propertyNamespace": "promptStringSeparator",
+            "propertyType": "string"
+        }
+    @end-property-configuration
+
+    @property-documentation:
+    @end-property-documentation
+*/
+CLI.prototype.promptStringSeparator = CLI.DEFAULT_PROMPT_STRING_SEPARATOR;
 
 /*:
 	@property-configuration:
@@ -287,6 +325,19 @@ CLI.prototype.commandLineInterfaceSet = { };
 CLI.prototype.commandLineInterfaceList = [ ];
 
 /*:
+    @property-configuration:
+        {
+            "propertyNamespace": "injectedLineList",
+            "propertyType": "List"
+        }
+    @end-property-configuration
+
+    @property-documentation:
+    @end-property-documentation
+*/
+CLI.prototype.injectedLineList = [ ];
+
+/*:
 	@method-configuration:
 		{
 
@@ -309,8 +360,6 @@ CLI.prototype.initialize = function initialize( promptString, workingDirectory )
 	this.setPromptString( promptString );
 
 	this.setWorkingDirectory( workingDirectory );
-
-	this.setMaxListeners( 0 );
 
 	return this;
 };
@@ -335,15 +384,30 @@ CLI.prototype.configure = function configure( promptString, workingDirectory ){
 		@end-meta-configuration
 	*/
 
+    this.setMaxListeners( 0 );
+
 	this.searchAllCLIInterpreterEngine( );
 
 	this.includeAllCLIInterpreterEngine( );
 
 	this.bindAllCLIInterpreterEngine( );
 
-	process.stdin.pipe( this, { "end": false } );
+    this.registerEventListener( );
 
 	return this;
+};
+
+CLI.prototype.registerEventListener = function registerEventLister( ){
+    var self = this;
+
+    this.on( EVENT.WORKING_ENVIRONMENT_CHANGED,
+        function onWorkingEnvironmentChanged( ){
+            self.searchAllCLIInterpreterEngine( );
+
+            self.includeAllCLIInterpreterEngine( );
+
+            self.bindAllCLIInterpreterEngine( );
+        } );
 };
 
 /*:
@@ -369,7 +433,7 @@ CLI.prototype.setPromptString = function setPromptString( promptString ){
 	this.promptString = promptString || this.promptString || DEFAULT_PROMPT_STRING;
 	this.promptStringList.splice( 0, 2, this.promptString, " " );
 
-	this.emit( EVENT.PROMPT_STRING_MODIFIED, this );
+    this.emit( EVENT.PROMPT_STRING_MODIFIED, this.buildPromptString( ) );
 
 	return this;
 };
@@ -395,7 +459,7 @@ CLI.prototype.prependPromptString = function prependPromptString( promptString )
 
 	this.promptStringList.splice( 0, 0, promptString );
 
-	this.emit( EVENT.PROMPT_STRING_MODIFIED, this );
+	this.emit( EVENT.PROMPT_STRING_MODIFIED, this.buildPromptString( ) );
 
 	return this;
 };
@@ -413,7 +477,7 @@ CLI.prototype.prependPromptString = function prependPromptString( promptString )
 CLI.prototype.clearPromptString = function clearPromptString( ){
 	while( this.promptStringList.pop( ), this.promptStringList.length );
 
-	this.emit( EVENT.PROMPT_STRING_MODIFIED, this );
+    this.emit( EVENT.PROMPT_STRING_MODIFIED, this.buildPromptString( ) );
 
 	return this;
 };
@@ -469,9 +533,55 @@ CLI.prototype.formatPromptString = function formatPromptString( ){
 
 	Array.prototype.splice.apply( this.promptStringList, formatArgumentList );
 
-	this.emit( EVENT.PROMPT_STRING_MODIFIED );
+    this.emit( EVENT.PROMPT_STRING_MODIFIED, this.buildPromptString( ) );
 
 	return this;
+};
+
+/*:
+     @method-configuration:
+        {
+
+        }
+    @end-method-configuration
+
+    @method-documentation:
+    @end-method-documentation
+*/
+CLI.prototype.setPromptStringSeparator = function setPromptStringSeparator( promptStringSeparator ){
+    if( promptStringSeparator != this.promptStringSeparator ){
+        this.promptStringSeparator = promptStringSeparator;
+
+        this.emit( EVENT.PROMPT_STRING_MODIFIED, this.buildPromptString( ) );
+    }
+
+    return this;
+};
+
+/*:
+    @method-configuration:
+        {
+
+        }
+    @end-method-configuration
+
+    @method-documentation:
+    @end-method-documentation
+*/
+CLI.prototype.buildPromptString = function buildPromptString( promptStringSeparator ){
+    /*:
+        @meta-configuration:
+            {
+                "promptStringSeparator:optional": "string"
+            }
+        @end-meta-configuration
+    */
+
+    if( typeof promptStringSeparator == "string" ){
+        this.setPromptStringSeparator( promptStringSeparator );
+    }
+
+    return this.promptStringList.join( this.promptStringSeparator );
 };
 
 /*:
@@ -498,9 +608,15 @@ CLI.prototype.setWorkingDirectory = function setWorkingDirectory( workingDirecto
 	if( fs.existsSync( workingDirectory ) &&
 		fs.statSync( workingDirectory ).isDirectory( ) )
 	{
+        var previousWorkingDirectory = this.workingDirectory;
+
 		this.workingDirectory = workingDirectory;
 
 		process.chdir( this.workingDirectory );
+
+        if( this.workingDirectory != previousWorkingDirectory ){
+            this.emit( EVENT.WORKING_ENVIRONMENT_CHANGED );
+        }
 
 	}else{
 		var error = new Error( "fatal:given working directory is not existing" );
@@ -521,7 +637,7 @@ CLI.prototype.setWorkingDirectory = function setWorkingDirectory( workingDirecto
 	@method-documentation:
 	@end-method-documentation
 */
-CLI.prototype.setEnvironmentAdaptationLevel = function setEnvironmentAdaptationLevel( level ){
+CLI.prototype.setEnvironmentAdaptationLevel = function setEnvironmentAdaptationLevel( environmentAdaptLevel ){
 	/*:
 		@meta-configuration:
 			{
@@ -530,7 +646,7 @@ CLI.prototype.setEnvironmentAdaptationLevel = function setEnvironmentAdaptationL
 		@end-meta-configuration
 	*/
 
-	this.environmentAdaptLevel = level || this.environmentAdaptLevel || DEFAULT_ENVIRONMENT_ADAPT_LEVEL;
+	this.environmentAdaptLevel = environmentAdaptLevel || this.environmentAdaptLevel || DEFAULT_ENVIRONMENT_ADAPT_LEVEL;
 
 	return this;
 };
@@ -677,8 +793,6 @@ CLI.prototype.includeAllCLIInterpreterEngine = function includeAllCLIInterpreter
 	for( var index = 0; index < cliInterpreterListLength; index++ ){
 		cliInterpreterEngineFilePath = cliInterpreterList[ index ];
 
-		console.log( cliInterpreterEngineFilePath );
-
 		cliInterpreterEngineNamespace = cliInterpreterEngineFilePath.split( ".js" )[ 0 ].match( CLI_INTERPRETER_NAMESPACE_PATTERN )[ 1 ];
 
 		if( fs.existsSync( cliInterpreterEngineFilePath ) &&
@@ -743,27 +857,26 @@ CLI.prototype.constructCommandLineInterface = function constructCommandLineInter
 	var self = this;
 
 	var commandLineInterface = readline.createInterface( {
-		"input": this,
-		"output": this,
+		"input": process.stdin,
+		"output": process.stdout,
 		"terminal": true
 	} );
 
-	commandLineInterface.setPrompt( this.promptStringList.join( "" ) );
+	commandLineInterface.setPrompt( this.buildPromptString( ) );
 
 	this.on( EVENT.PROMPT_STRING_MODIFIED,
-		function onPromptStringModified( ){
-			commandLineInterface.setPrompt( self.promptStringList.join( "" ) );
+		function onPromptStringModified( promptString ){
+			commandLineInterface.setPrompt( promptString );
 		} );
 
 	commandLineInterface.on( "line",
 		function onLine( line ){
-			self.currentLine = line;
 
-			self.emit( EVENT.LINE_STRING_MODIFIED, self );
+			self.emit( EVENT.LINE_STRING_MODIFIED, line );
 
 			if( typeof commandLineNamespace == "string" ){
 				var eventNamespace = [ EVENT.LINE_STRING_MODIFIED, commandLineNamespace ].join( ":" );
-				self.emit( eventNamespace, self );
+				self.emit( eventNamespace, line );
 			}
 
 			commandLineInterface.prompt( );
@@ -771,11 +884,27 @@ CLI.prototype.constructCommandLineInterface = function constructCommandLineInter
 
 	if( typeof commandLineNamespace == "string" ){
 		this.commandLineInterfaceSet[ commandLineNamespace ] = commandLineInterface;
+
 	}else{
 		this.commandLineInterfaceList.push( commandLineInterface );
 	}
 
-	return commandLineInterface;
+    commandLineInterface.input.on( "data",
+        function onData( data ){
+            self.emit( EVENT.LINE_STRING_FLOWED, data );
+        } );
+
+    commandLineInterface.input.on( "end",
+        function onEnd( ){
+            self.emit( EVENT.FLOWING_LINE_STRING_STOPPED );
+        } );
+
+    self.on( EVENT.LINE_STRING_INJECTED,
+        function onLineStringInjected( chunk, encoding, callback ){
+            commandLineInterface.output.end( chunk, encoding, callback )
+        } );
+
+    return this;
 };
 
 /*:
@@ -809,77 +938,13 @@ CLI.prototype.startCommandLine = function startCommandLine( commandLineNamespace
 	return this;
 };
 
-/*:
-	@method-configuration:
-		{
-
-		}
-	@end-method-configuration
-
-	@method-documentation:
-	@end-method-documentation
-*/
-CLI.prototype._read = function read( size ){
-	/*:
-		@meta-configuration:
-			{
-				"size": "number"
-			}
-		@end-meta-configuration
-	*/
-
-	var self = this;
-
-	this.on( EVENT.LINE_STRING_INJECTED,
-		function onLineStringInjected( injectedLine ){
-			self.push( injectedLine );
-			self.push( null );
-		} );
-};
-
-/*:
-	@method-configuration:
-		{
-
-		}
-	@end-method-configuration
-
-	@method-documentation:
-	@end-method-documentation
-*/
-CLI.prototype._write = function write( chunk, encoding, callback ){
-	/*:
-		@meta-configuration:
-			{
-				"chunk": "string",
-				"encoding": "string",
-				"callback": "function"
-			}
-		@end-meta-configuration
-	*/
-
-	this.currentChunk = chunk;
-	this.currentEncoding = encoding;
-	this.currentWriteCallback = callback;
-
-	this.emit( EVENT.LINE_STRING_FLOWED, this );
-
-	var self = this;
-	setTimeout( function onTimeout( ){
-		if( typeof callback == "function" && 
-			!callback.hasCalled )
-		{	
-			callback.call( self );
-		}
-	}, 0 );
-};
-
 var util = require( "util" );
 var readline = require( "readline" );
 var fs = require( "fs" );
 var path = require( "path" );
-var stream = require( "stream" );
+var events = require( "events" );
 
+const DEFAULT_PROMPT_STRING_SEPARATOR = "";
 const DEFAULT_PROMPT_STRING = ">";
 const DEFAULT_WORKING_DIRECTORY = "../../";
 const DEFAULT_ENVIRONMENT_ADAPT_LEVEL = 2;
@@ -888,7 +953,9 @@ const EVENT = {
 	"PROMPT_STRING_MODIFIED": "prompt-string-modified",
 	"LINE_STRING_MODIFIED": "line-string-modified",
 	"LINE_STRING_INJECTED": "line-string-injected",
-	"LINE_STRING_FLOWED": "line-string-flowed"
+	"LINE_STRING_FLOWED": "line-string-flowed",
+    "FLOWING_LINE_STRING_STOPPED": "flowing-line-string-stopped",
+    "WORKING_ENVIRONMENT_CHANGED": "working-environment-changed"
 };
 
 var prototypeSet = { };
@@ -896,7 +963,7 @@ for( var key in CLI.prototype ){
 	prototypeSet[ key ] = CLI.prototype[ key ];
 }
 
-util.inherits( CLI, stream.Duplex );
+util.inherits( CLI, events.EventEmitter );
 
 for( var key in prototypeSet ){
 	CLI.prototype[ key ] = prototypeSet[ key ];
@@ -905,9 +972,7 @@ for( var key in prototypeSet ){
 module.exports = CLI;
 
 var cli = new CLI( );
-cli.constructCommandLineInterface( );
-cli.startCommandLine( );
-/*cli.on( EVENT.LINE_STRING_FLOWED,
-	function onLineStringFlowed( cli ){
-		cli.emit( EVENT.LINE_STRING_INJECTED, cli.currentChunk.toString( ) );
-	} );*/
+cli
+    .adaptWorkingEnvironment( )
+    .constructCommandLineInterface( )
+    .startCommandLine( );
