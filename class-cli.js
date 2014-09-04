@@ -100,7 +100,22 @@ var CLI = function CLI( promptString, workingDirectory ){
 */
 CLI.cliContextEnvironmentSet = { };
 
+/*:
+	@class-method-configuration:
+	@end-class-method-configuration
+
+	@class-method-documentation:
+	@end-class-method-documentation
+*/
 CLI.addCLIContextEnvironment = function addCLIContextEnvironment( cliContextEnvironment ){
+	/*:
+		@meta-configuration:
+			{
+				"cliContextEnvironment:required": "CLI"
+			}
+		@end-meta-configuration
+	*/
+
 	if( cliContextEnvironment.cliNamespace &&
 		cliContextEnvironment.cliNamespace in CLI.cliContextEnvironmentSet )
 	{
@@ -456,7 +471,7 @@ CLI.prototype.configure = function configure( promptString, workingDirectory ){
 CLI.prototype.registerEventListener = function registerEventLister( ){
 	var self = this;
 
-	this.on( EVENT.WORKING_ENVIRONMENT_CHANGED,
+	this.listenToEvent( EVENT.WORKING_ENVIRONMENT_CHANGED,
 		function onWorkingEnvironmentChanged( ){
 			self.searchAllCLIInterpreterEngine( );
 
@@ -466,6 +481,27 @@ CLI.prototype.registerEventListener = function registerEventLister( ){
 		} );
 
 	return this;
+};
+
+CLI.prototype.fireEvent = function fireEvent( eventName, specificNamespace, eventDataList ){
+	eventDataList = Array.prototype.slice.call( arguments ).slice( 2 );
+
+	var eventNamespace = this.resolveNamespace( eventName, specificNamespace );
+
+	eventDataList.splice( 0, 0, eventNamespace );
+
+	this.emit.apply( this, eventDataList );
+};
+
+CLI.prototype.listenToEvent = function listenToEvent( eventName, specificNamespace, eventHandler ){
+	var eventNamespace = this.resolveNamespace( eventName, specificNamespace );
+
+	var self = this;
+	var delegateHandler = function delegateHandler( ){
+		eventHandler.apply( self, Array.prototype.slice.call( arguments ) );
+	}
+
+	this.on( eventNamespace, delegateHandler );
 };
 
 CLI.prototype.setCLINamespace = function setCLINamespace( cliNamespace ){
@@ -480,13 +516,44 @@ CLI.prototype.setCLINamespace = function setCLINamespace( cliNamespace ){
 
 		CLI.addCLIContextEnvironment( this );
 
-		this.emit( EVENT.CLI_NAMESPACE_SET, this.cliNamespace );
+		this.fireEvent( EVENT.CLI_NAMESPACE_SET, null, this.cliNamespace );
 	}
 
 	return this;
 };
 
-CLI.prototype.resolveNamespace = function resolveNamespace( specificNamespace ){
+CLI.prototype.resolveNamespace = function resolveNamespace( eventName, specificNamespace ){
+	return [ 
+		eventName,
+		this.cliSessionNamespace || this.cliNamespace || "",
+		specificNamespace || ""
+	].join( ":" ).replace( /\:+/g, ":" );
+};
+
+CLI.prototype.checkIfCLISession = function checkIfCLISession( ){
+	return ( typeof this.cliSessionNamespace == "string" && this.cliSessionNamespace );
+};
+
+CLI.prototype.transformAsCLISession = function transformAsCLISession( cliSessionNamespace ){
+	if( this.checkIfCLISession( ) ){
+		var error = new Error( "cli is already in session" );
+		console.error( error );
+		throws error;
+	}
+
+	this.cliSessionNamespace = cliSessionNamespace;
+
+	this.fireEvent( EVENT.CLI_SESSION_NAMESPACE_SET, this.cliSessionNamespace );
+
+	this.listenToEvent( EVENT.CLI_SESSION_ENDED,
+		function onCLISessionEnded( ){
+			this.cliSessionNamespace = "";
+		} );
+
+	return this;
+};
+
+CLI.prototype.cloneAsCLISession = function cloneAsCLISession( cliSessionNamespace ){
 
 };
 
@@ -500,12 +567,12 @@ CLI.prototype.resolveNamespace = function resolveNamespace( specificNamespace ){
 	@method-documentation:
 	@end-method-documentation
 */
-CLI.prototype.setPromptString = function setPromptString( promptString, namespace ){
+CLI.prototype.setPromptString = function setPromptString( promptString, commandLineNamespace ){
 	/*:
 		@meta-configuration:
 			{
 				"promptString:optional": "string",
-				"workingDirectory:optional": "string"
+				"specificNamespace:optional": "string"
 			}
 		@end-meta-configuration
 	*/
@@ -513,7 +580,7 @@ CLI.prototype.setPromptString = function setPromptString( promptString, namespac
 	this.promptString = promptString || this.promptString || DEFAULT_PROMPT_STRING;
 	this.promptStringList.splice( 0, 2, this.promptString, " " );
 
-	this.emit( EVENT.PROMPT_STRING_MODIFIED, this.buildPromptString( ) );
+	this.fireEvent( EVENT.PROMPT_STRING_MODIFIED, commandLineNamespace, this.buildPromptString( ) );
 
 	return this;
 };
@@ -528,18 +595,19 @@ CLI.prototype.setPromptString = function setPromptString( promptString, namespac
 	@method-documentation:
 	@end-method-documentation
 */
-CLI.prototype.prependPromptString = function prependPromptString( promptString ){
+CLI.prototype.prependPromptString = function prependPromptString( promptString, commandLineNamespace ){
 	/*:
 		@meta-configuration:
 			{
-				"promptString:optional": "string"
+				"promptString:optional": "string",
+				"commandLineNamespace:optional": "string"
 			}
 		@end-meta-configuration
 	*/
 
 	this.promptStringList.splice( 0, 0, promptString );
 
-	this.emit( EVENT.PROMPT_STRING_MODIFIED, this.buildPromptString( ) );
+	this.fireEvent( EVENT.PROMPT_STRING_MODIFIED, commandLineNamespace, this.buildPromptString( ) );
 
 	return this;
 };
@@ -554,10 +622,10 @@ CLI.prototype.prependPromptString = function prependPromptString( promptString )
 	@method-documentation:
 	@end-method-documentation
 */
-CLI.prototype.clearPromptString = function clearPromptString( ){
+CLI.prototype.clearPromptString = function clearPromptString( commandLineNamespace ){
 	while( this.promptStringList.pop( ), this.promptStringList.length );
 
-	this.emit( EVENT.PROMPT_STRING_MODIFIED, this.buildPromptString( ) );
+	this.fireEvent( EVENT.PROMPT_STRING_MODIFIED, commandLineNamespace, this.buildPromptString( ) );
 
 	return this;
 };
@@ -606,14 +674,14 @@ CLI.prototype.resetPromptString = function resetPromptString( ){
 	@method-documentation:
 	@end-method-documentation
 */
-CLI.prototype.formatPromptString = function formatPromptString( ){
+CLI.prototype.formatPromptString = function formatPromptString( commandLineNamespace ){
 	var formatArgumentList = [ 0, 0 ].concat( Array.prototype.slice.call( arguments ) );
 
 	this.clearPromptStringSilently( );
 
 	Array.prototype.splice.apply( this.promptStringList, formatArgumentList );
 
-	this.emit( EVENT.PROMPT_STRING_MODIFIED, this.buildPromptString( ) );
+	this.fireEvent( EVENT.PROMPT_STRING_MODIFIED, commandLineNamespace, this.buildPromptString( ) );
 
 	return this;
 };
@@ -628,11 +696,11 @@ CLI.prototype.formatPromptString = function formatPromptString( ){
 	@method-documentation:
 	@end-method-documentation
 */
-CLI.prototype.setPromptStringSeparator = function setPromptStringSeparator( promptStringSeparator ){
+CLI.prototype.setPromptStringSeparator = function setPromptStringSeparator( promptStringSeparator, commandLineNamespace ){
 	if( promptStringSeparator != this.promptStringSeparator ){
 		this.promptStringSeparator = promptStringSeparator;
 
-		this.emit( EVENT.PROMPT_STRING_MODIFIED, this.buildPromptString( ) );
+		this.fireEvent( EVENT.PROMPT_STRING_MODIFIED, commandLineNamespace, this.buildPromptString( ) );
 	}
 
 	return this;
@@ -695,7 +763,7 @@ CLI.prototype.setWorkingDirectory = function setWorkingDirectory( workingDirecto
 		process.chdir( this.workingDirectory );
 
 		if( this.workingDirectory != previousWorkingDirectory ){
-			this.emit( EVENT.WORKING_ENVIRONMENT_CHANGED );
+			this.fireEvent( EVENT.WORKING_ENVIRONMENT_CHANGED );
 		}
 
 	}else{
@@ -1043,46 +1111,34 @@ CLI.prototype.configureCommandLineInterface = function configureCommandLineInter
 
 	commandLineNamespace = commandLineNamespace || "";
 
-	var eventNamespace = [ EVENT.PROMPT_STRING_MODIFIED, commandLineNamespace ].join( ":" );
-	this.on( eventNamespace,
+	this.listenToEvent( EVENT.PROMPT_STRING_MODIFIED, commandLineNamespace,
 		function onPromptStringModified( promptString ){
 			commandLineInterface.setPrompt( promptString );
 		} );
 
-
-
 	commandLineInterface.on( "line",
 		function onLine( line ){
-
-			var eventNamespace = [ EVENT.LINE_STRING_MODIFIED, commandLineNamespace ].join( ":" );
-
-			self.emit( eventNamespace, line, commandLineInterface );
+			self.fireEvent( EVENT.LINE_STRING_MODIFIED, commandLineNamespace, line, commandLineInterface );
 
 			commandLineInterface.prompt( );
 		} );
 
 	commandLineInterface.input.on( "data",
 		function onData( data ){
-			var eventNamespace = [ EVENT.LINE_STRING_FLOWED, commandLineNamespace ].join( ":" );
-
-			self.emit( eventNamespace, data );
+			self.fireEvent( EVENT.LINE_STRING_FLOWED, commandLineNamespace, data );
 		} );
 
 	commandLineInterface.input.on( "end",
 		function onEnd( ){
-			var eventNamespace = [ EVENT.FLOWING_LINE_STRING_STOPPED, commandLineNamespace ].join( ":" );
-
-			self.emit( eventNamespace );
+			self.fireEvent( EVENT.FLOWING_LINE_STRING_STOPPED, commandLineNamespace );
 		} );
 
-	eventNamespace = [ EVENT.LINE_STRING_INJECTED, commandLineNamespace ].join( ":" );
-	self.on( eventNamespace,
+	this.listenToEvent( EVENT.LINE_STRING_INJECTED, commandLineNamespace,
 		function onLineStringInjected( chunk, encoding, callback ){
 			commandLineInterface.output.end( chunk, encoding, callback )
 		} );
 
-	eventNamespace = [ EVENT.COMMAND_LINE_INTERFACE_ENDED, commandLineNamespace ].join( ":" );
-	self.on( eventNamespace,
+	this.listenToEvent( EVENT.COMMAND_LINE_INTERFACE_ENDED, commandLineNamespace,
 		function onCommandLineInterfaceEnded( ){
 			commandLineInterface.close( );
 		} );
@@ -1140,11 +1196,7 @@ CLI.prototype.endCommandLine = function endCommandLine( commandLineNamespace ){
 		@end-meta-configuration
 	*/
 
-	commandLineNamespace = commandLineNamespace || "";
-
-	var eventNamespace = [ EVENT.COMMAND_LINE_INTERFACE_ENDED, commandLineNamespace ].join( ":" );
-
-	this.emit( eventNamespace );
+	this.fireEvent( EVENT.COMMAND_LINE_INTERFACE_ENDED, commandLineNamespace );
 
 	return this;
 };
@@ -1182,7 +1234,9 @@ const EVENT = {
 	"FLOWING_LINE_STRING_STOPPED": "flowing-line-string-stopped",
 	"WORKING_ENVIRONMENT_CHANGED": "working-environment-changed",
 	"COMMAND_LINE_INTERFACE_ENDED": "command-line-interface-ended",
-	"CLI_NAMESPACE_SET": "cli-namespace-set"
+	"CLI_NAMESPACE_SET": "cli-namespace-set",
+	"CLI_SESSION_NAMESPACE_SET": "cli-session-namespace-set",
+	"CLI_SESSION_ENDED": "cli-session-ended"
 };
 
 var prototypeSet = { };
