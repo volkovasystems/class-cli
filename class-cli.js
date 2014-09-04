@@ -62,8 +62,10 @@
 				"LINE_STRING_MODIFIED": "line-string-modified",
 				"LINE_STRING_INJECTED": "line-string-injected",
 				"LINE_STRING_FLOWED": "line-string-flowed",
-                "FLOWING_LINE_STRING_STOPPED": "flowing-line-string-stopped",
-                "WORKING_ENVIRONMENT_CHANGED": "working-environment-changed"
+				"FLOWING_LINE_STRING_STOPPED": "flowing-line-string-stopped",
+				"WORKING_ENVIRONMENT_CHANGED": "working-environment-changed",
+				"COMMAND_LINE_INTERFACE_ENDED": "command-line-interface-ended",
+				"CLI_NAMESPACE_SET": "cli-namespace-set"
 			}
 		}
 	@end-class-constant
@@ -87,6 +89,29 @@ var CLI = function CLI( promptString, workingDirectory ){
 
 	this.initialize.call( this, promptString, workingDirectory );
 	this.configure.call( this, promptString, workingDirectory );
+};
+
+/*:
+	@class-property-configuration:
+	@end-class-property-configuration
+
+	@class-property-documentation:
+	@end-class-property-documentation
+*/
+CLI.cliContextEnvironmentSet = { };
+
+CLI.addCLIContextEnvironment = function addCLIContextEnvironment( cliContextEnvironment ){
+	if( cliContextEnvironment.cliNamespace &&
+		cliContextEnvironment.cliNamespace in CLI.cliContextEnvironmentSet )
+	{
+		var error = new Error( "cli context environment already registered" );
+		console.error( error );
+		throw error;
+	}
+
+	if( cliContextEnvironment.cliNamespace ){
+		CLI.cliContextEnvironmentSet[ cliContextEnvironment.cliNamespace ] = cliContextEnvironment;
+	}
 };
 
 /*:
@@ -133,31 +158,49 @@ CLI.EVENT = {
 	*/
 	"LINE_STRING_FLOWED": "line-string-flowed",
 
-    /*:
-     @class-event-constant-configuration:
-     @end-class-constant-configuration
+	/*:
+		@class-event-constant-configuration:
+		@end-class-constant-configuration
 
-     @class-event-constant-documentation:
-     @end-class-event-constant-documentation
-     */
-    "FLOWING_LINE_STRING_STOPPED": "flowing-line-string-stopped",
+		@class-event-constant-documentation:
+		@end-class-event-constant-documentation
+	*/
+	"FLOWING_LINE_STRING_STOPPED": "flowing-line-string-stopped",
 
-    /*:
-     @class-event-constant-configuration:
-     @end-class-constant-configuration
+	/*:
+		@class-event-constant-configuration:
+		@end-class-constant-configuration
 
-     @class-event-constant-documentation:
-     @end-class-event-constant-documentation
-     */
-    "WORKING_ENVIRONMENT_CHANGED": "working-environment-changed"
+		@class-event-constant-documentation:
+		@end-class-event-constant-documentation
+	*/
+	"WORKING_ENVIRONMENT_CHANGED": "working-environment-changed",
+
+	/*:
+		@class-event-constant-configuration:
+		@end-class-constant-configuration
+
+		@class-event-constant-documentation:
+		@end-class-event-constant-documentation
+	*/
+	"COMMAND_LINE_INTERFACE_ENDED": "command-line-interface-ended",
+
+	/*:
+		@class-event-constant-configuration:
+		@end-class-constant-configuration
+
+		@class-event-constant-documentation:
+		@end-class-event-constant-documentation
+	*/
+	"CLI_NAMESPACE_SET": "cli-namespace-set"
 };
 
 /*:
-    @class-constant-configuration:
-    @end-class-constant-configuration
+	@class-constant-configuration:
+	@end-class-constant-configuration
 
-    @class-constant-documentation:
-    @end-class-constant-documentation
+	@class-constant-documentation:
+	@end-class-constant-documentation
 */
 CLI.DEFAULT_PROMPT_STRING_SEPARATOR = "";
 
@@ -198,15 +241,15 @@ CLI.DEFAULT_ENVIRONMENT_ADAPT_LEVEL = 2;
 CLI.CLI_INTERPRETER_NAMESPACE_PATTERN = /cli-((?:[a-z][a-z0-9]*-?)*[a-z][a-z0-9]*)$/;
 
 /*:
-    @property-configuration:
-        {
-            "propertyNamespace": "promptStringSeparator",
-            "propertyType": "string"
-        }
-    @end-property-configuration
+	@property-configuration:
+		{
+			"propertyNamespace": "promptStringSeparator",
+			"propertyType": "string"
+		}
+	@end-property-configuration
 
-    @property-documentation:
-    @end-property-documentation
+	@property-documentation:
+	@end-property-documentation
 */
 CLI.prototype.promptStringSeparator = CLI.DEFAULT_PROMPT_STRING_SEPARATOR;
 
@@ -325,17 +368,30 @@ CLI.prototype.commandLineInterfaceSet = { };
 CLI.prototype.commandLineInterfaceList = [ ];
 
 /*:
-    @property-configuration:
-        {
-            "propertyNamespace": "injectedLineList",
-            "propertyType": "List"
-        }
-    @end-property-configuration
+	@property-configuration:
+		{
+			"propertyNamespace": "injectedLineList",
+			"propertyType": "List"
+		}
+	@end-property-configuration
 
-    @property-documentation:
-    @end-property-documentation
+	@property-documentation:
+	@end-property-documentation
 */
 CLI.prototype.injectedLineList = [ ];
+
+/*:
+	@property-configuration:
+		{
+			"propertyNamespace": "CLINamespace",
+			"propertyType": "string"
+		}
+	@end-property-configuration
+
+	@property-documentation:
+	@end-property-documentation
+*/
+CLI.prototype.cliNamespace = "";
 
 /*:
 	@method-configuration:
@@ -384,7 +440,7 @@ CLI.prototype.configure = function configure( promptString, workingDirectory ){
 		@end-meta-configuration
 	*/
 
-    this.setMaxListeners( 0 );
+	this.setMaxListeners( 0 );
 
 	this.searchAllCLIInterpreterEngine( );
 
@@ -392,22 +448,46 @@ CLI.prototype.configure = function configure( promptString, workingDirectory ){
 
 	this.bindAllCLIInterpreterEngine( );
 
-    this.registerEventListener( );
+	this.registerEventListener( );
 
 	return this;
 };
 
 CLI.prototype.registerEventListener = function registerEventLister( ){
-    var self = this;
+	var self = this;
 
-    this.on( EVENT.WORKING_ENVIRONMENT_CHANGED,
-        function onWorkingEnvironmentChanged( ){
-            self.searchAllCLIInterpreterEngine( );
+	this.on( EVENT.WORKING_ENVIRONMENT_CHANGED,
+		function onWorkingEnvironmentChanged( ){
+			self.searchAllCLIInterpreterEngine( );
 
-            self.includeAllCLIInterpreterEngine( );
+			self.includeAllCLIInterpreterEngine( );
 
-            self.bindAllCLIInterpreterEngine( );
-        } );
+			self.bindAllCLIInterpreterEngine( );
+		} );
+
+	return this;
+};
+
+CLI.prototype.setCLINamespace = function setCLINamespace( cliNamespace ){
+	if( this.cliNamespace &&
+		typeof this.cliNamespace == "string" )
+	{
+		console.warn( "CLI namespace for this instance is already set" );
+		console.warn( "it was designed that the namespace for any CLI instance not to change once set because it will have bubble effects in future implementations" );
+
+	}else{
+		this.cliNamespace = cliNamespace;
+
+		CLI.addCLIContextEnvironment( this );
+
+		this.emit( EVENT.CLI_NAMESPACE_SET, this.cliNamespace );
+	}
+
+	return this;
+};
+
+CLI.prototype.resolveNamespace = function resolveNamespace( specificNamespace ){
+
 };
 
 /*:
@@ -420,7 +500,7 @@ CLI.prototype.registerEventListener = function registerEventLister( ){
 	@method-documentation:
 	@end-method-documentation
 */
-CLI.prototype.setPromptString = function setPromptString( promptString ){
+CLI.prototype.setPromptString = function setPromptString( promptString, namespace ){
 	/*:
 		@meta-configuration:
 			{
@@ -433,7 +513,7 @@ CLI.prototype.setPromptString = function setPromptString( promptString ){
 	this.promptString = promptString || this.promptString || DEFAULT_PROMPT_STRING;
 	this.promptStringList.splice( 0, 2, this.promptString, " " );
 
-    this.emit( EVENT.PROMPT_STRING_MODIFIED, this.buildPromptString( ) );
+	this.emit( EVENT.PROMPT_STRING_MODIFIED, this.buildPromptString( ) );
 
 	return this;
 };
@@ -477,7 +557,7 @@ CLI.prototype.prependPromptString = function prependPromptString( promptString )
 CLI.prototype.clearPromptString = function clearPromptString( ){
 	while( this.promptStringList.pop( ), this.promptStringList.length );
 
-    this.emit( EVENT.PROMPT_STRING_MODIFIED, this.buildPromptString( ) );
+	this.emit( EVENT.PROMPT_STRING_MODIFIED, this.buildPromptString( ) );
 
 	return this;
 };
@@ -510,7 +590,7 @@ CLI.prototype.clearPromptStringSilently = function clearPromptStringSilently( ){
 */
 CLI.prototype.resetPromptString = function resetPromptString( ){
 	this.clearPromptStringSilently( );
-	
+
 	this.setPromptString( this.promptString );
 
 	return this;
@@ -533,55 +613,55 @@ CLI.prototype.formatPromptString = function formatPromptString( ){
 
 	Array.prototype.splice.apply( this.promptStringList, formatArgumentList );
 
-    this.emit( EVENT.PROMPT_STRING_MODIFIED, this.buildPromptString( ) );
+	this.emit( EVENT.PROMPT_STRING_MODIFIED, this.buildPromptString( ) );
 
 	return this;
 };
 
 /*:
-     @method-configuration:
-        {
+	 @method-configuration:
+		{
 
-        }
-    @end-method-configuration
+		}
+	@end-method-configuration
 
-    @method-documentation:
-    @end-method-documentation
+	@method-documentation:
+	@end-method-documentation
 */
 CLI.prototype.setPromptStringSeparator = function setPromptStringSeparator( promptStringSeparator ){
-    if( promptStringSeparator != this.promptStringSeparator ){
-        this.promptStringSeparator = promptStringSeparator;
+	if( promptStringSeparator != this.promptStringSeparator ){
+		this.promptStringSeparator = promptStringSeparator;
 
-        this.emit( EVENT.PROMPT_STRING_MODIFIED, this.buildPromptString( ) );
-    }
+		this.emit( EVENT.PROMPT_STRING_MODIFIED, this.buildPromptString( ) );
+	}
 
-    return this;
+	return this;
 };
 
 /*:
-    @method-configuration:
-        {
+	@method-configuration:
+		{
 
-        }
-    @end-method-configuration
+		}
+	@end-method-configuration
 
-    @method-documentation:
-    @end-method-documentation
+	@method-documentation:
+	@end-method-documentation
 */
 CLI.prototype.buildPromptString = function buildPromptString( promptStringSeparator ){
-    /*:
-        @meta-configuration:
-            {
-                "promptStringSeparator:optional": "string"
-            }
-        @end-meta-configuration
-    */
+	/*:
+		@meta-configuration:
+			{
+				"promptStringSeparator:optional": "string"
+			}
+		@end-meta-configuration
+	*/
 
-    if( typeof promptStringSeparator == "string" ){
-        this.setPromptStringSeparator( promptStringSeparator );
-    }
+	if( typeof promptStringSeparator == "string" ){
+		this.setPromptStringSeparator( promptStringSeparator );
+	}
 
-    return this.promptStringList.join( this.promptStringSeparator );
+	return this.promptStringList.join( this.promptStringSeparator );
 };
 
 /*:
@@ -608,15 +688,15 @@ CLI.prototype.setWorkingDirectory = function setWorkingDirectory( workingDirecto
 	if( fs.existsSync( workingDirectory ) &&
 		fs.statSync( workingDirectory ).isDirectory( ) )
 	{
-        var previousWorkingDirectory = this.workingDirectory;
+		var previousWorkingDirectory = this.workingDirectory;
 
 		this.workingDirectory = workingDirectory;
 
 		process.chdir( this.workingDirectory );
 
-        if( this.workingDirectory != previousWorkingDirectory ){
-            this.emit( EVENT.WORKING_ENVIRONMENT_CHANGED );
-        }
+		if( this.workingDirectory != previousWorkingDirectory ){
+			this.emit( EVENT.WORKING_ENVIRONMENT_CHANGED );
+		}
 
 	}else{
 		var error = new Error( "fatal:given working directory is not existing" );
@@ -741,7 +821,7 @@ CLI.prototype.searchAllCLIInterpreterEngine = function searchAllCLIInterpreterEn
 	if( cliInterpreterList.length > 0 ){
 		this.setCLIInterpreterList( cliInterpreterList );	
 	}
-	
+
 	return this;
 };
 
@@ -833,6 +913,8 @@ CLI.prototype.bindAllCLIInterpreterEngine = function bindAllCLIInterpreterEngine
 
 		cliInterpreterEngine.call( this, CLI );
 	}
+
+	return this;
 };
 
 /*:
@@ -854,8 +936,6 @@ CLI.prototype.constructCommandLineInterface = function constructCommandLineInter
 		@end-meta-configuration
 	*/
 
-	var self = this;
-
 	var commandLineInterface = readline.createInterface( {
 		"input": process.stdin,
 		"output": process.stdout,
@@ -864,47 +944,150 @@ CLI.prototype.constructCommandLineInterface = function constructCommandLineInter
 
 	commandLineInterface.setPrompt( this.buildPromptString( ) );
 
-	this.on( EVENT.PROMPT_STRING_MODIFIED,
+	if( typeof commandLineNamespace == "string" &&
+		commandLineNamespace )
+	{
+		this.constructSpecificCommandLineInterface( commandLineNamespace, commandLineInterface );
+
+	}else{
+		this.constructDisposableCommandLineInterface( commandLineInterface );
+	}
+
+	return this;
+};
+
+/*:
+	@method-configuration:
+		{
+
+		}
+	@end-method-configuration
+
+	@method-documentation:
+	@end-method-documentation
+*/
+CLI.prototype.constructSpecificCommandLineInterface = function constructSpecificCommandLineInterface( commandLineNamespace, commandLineInterface ){
+	/*:
+		@meta-configuration:
+			{
+				"commandLineInterface:required": "readline.Interface"
+				"commandLineNamespace:required": "string"
+			}
+		@end-meta-configuration
+	*/
+
+	if( !( commandLineInterface instanceof readline.Interface ) ){
+		this.constructCommandLineInterface( commandLineNamespace );
+
+	}else{
+		this.commandLineInterfaceSet[ commandLineNamespace ] = commandLineInterface;
+
+		this.configureCommandLineInterface( commandLineInterface, commandLineNamespace );
+	}
+
+	return this;
+};
+
+/*:
+	@method-configuration:
+		{
+
+		}
+	@end-method-configuration
+
+	@method-documentation:
+	@end-method-documentation
+*/
+CLI.prototype.constructDisposableCommandLineInterface = function constructDisposableCommandLineInterface( commandLineInterface ){
+	/*:
+		@meta-configuration:
+			{
+				"commandLineInterface:required": "readline.Interface"
+			}
+		@end-meta-configuration
+	*/
+
+	if( !( commandLineInterface instanceof readline.Interface ) ){
+		this.constructCommandLineInterface( commandLineNamespace );
+
+	}else{
+		this.commandLineInterfaceList.push( commandLineInterface );
+
+		this.configureCommandLineInterface( commandLineInterface );
+	}
+
+	return this;
+};
+
+/*:
+	@method-configuration:
+		{
+
+		}
+	@end-method-configuration
+
+	@method-documentation:
+	@end-method-documentation
+*/
+CLI.prototype.configureCommandLineInterface = function configureCommandLineInterface( commandLineInterface, commandLineNamespace ){
+	/*:
+		@meta-configuration:
+			{
+				"commandLineInterface:required": "readline.Interface"
+				"commandLineNamespace:optional": "string"
+			}
+		@end-meta-configuration
+	*/
+
+	var self = this;
+
+	commandLineNamespace = commandLineNamespace || "";
+
+	var eventNamespace = [ EVENT.PROMPT_STRING_MODIFIED, commandLineNamespace ].join( ":" );
+	this.on( eventNamespace,
 		function onPromptStringModified( promptString ){
 			commandLineInterface.setPrompt( promptString );
 		} );
 
+
+
 	commandLineInterface.on( "line",
 		function onLine( line ){
 
-			self.emit( EVENT.LINE_STRING_MODIFIED, line, commandLineInterface );
+			var eventNamespace = [ EVENT.LINE_STRING_MODIFIED, commandLineNamespace ].join( ":" );
 
-			if( typeof commandLineNamespace == "string" ){
-				var eventNamespace = [ EVENT.LINE_STRING_MODIFIED, commandLineNamespace ].join( ":" );
-				self.emit( eventNamespace, line, commandLineInterface );
-			}
+			self.emit( eventNamespace, line, commandLineInterface );
 
 			commandLineInterface.prompt( );
 		} );
 
-	if( typeof commandLineNamespace == "string" ){
-		this.commandLineInterfaceSet[ commandLineNamespace ] = commandLineInterface;
+	commandLineInterface.input.on( "data",
+		function onData( data ){
+			var eventNamespace = [ EVENT.LINE_STRING_FLOWED, commandLineNamespace ].join( ":" );
 
-	}else{
-		this.commandLineInterfaceList.push( commandLineInterface );
-	}
+			self.emit( eventNamespace, data );
+		} );
 
-    commandLineInterface.input.on( "data",
-        function onData( data ){
-            self.emit( EVENT.LINE_STRING_FLOWED, data );
-        } );
+	commandLineInterface.input.on( "end",
+		function onEnd( ){
+			var eventNamespace = [ EVENT.FLOWING_LINE_STRING_STOPPED, commandLineNamespace ].join( ":" );
 
-    commandLineInterface.input.on( "end",
-        function onEnd( ){
-            self.emit( EVENT.FLOWING_LINE_STRING_STOPPED );
-        } );
+			self.emit( eventNamespace );
+		} );
 
-    self.on( EVENT.LINE_STRING_INJECTED,
-        function onLineStringInjected( chunk, encoding, callback ){
-            commandLineInterface.output.end( chunk, encoding, callback )
-        } );
+	eventNamespace = [ EVENT.LINE_STRING_INJECTED, commandLineNamespace ].join( ":" );
+	self.on( eventNamespace,
+		function onLineStringInjected( chunk, encoding, callback ){
+			commandLineInterface.output.end( chunk, encoding, callback )
+		} );
 
-    return this;
+	eventNamespace = [ EVENT.COMMAND_LINE_INTERFACE_ENDED, commandLineNamespace ].join( ":" );
+	self.on( eventNamespace,
+		function onCommandLineInterfaceEnded( ){
+			commandLineInterface.close( );
+		} );
+
+	return this;
 };
 
 /*:
@@ -938,6 +1121,48 @@ CLI.prototype.startCommandLine = function startCommandLine( commandLineNamespace
 	return this;
 };
 
+/*:
+	@method-configuration:
+		{
+
+		}
+	@end-method-configuration
+
+	@method-documentation:
+	@end-method-documentation
+*/
+CLI.prototype.endCommandLine = function endCommandLine( commandLineNamespace ){
+	/*:
+		@meta-configuration:
+			{
+				"commandLineNamespace:optional": "string"
+			}
+		@end-meta-configuration
+	*/
+
+	commandLineNamespace = commandLineNamespace || "";
+
+	var eventNamespace = [ EVENT.COMMAND_LINE_INTERFACE_ENDED, commandLineNamespace ].join( ":" );
+
+	this.emit( eventNamespace );
+
+	return this;
+};
+
+/*:
+	@method-configuration:
+		{
+
+		}
+	@end-method-configuration
+
+	@method-documentation:
+	@end-method-documentation
+*/
+CLI.prototype.destroyCLIContextEnvironment = function destroyCLIContextEnvironment( ){
+
+};
+
 var util = require( "util" );
 var readline = require( "readline" );
 var fs = require( "fs" );
@@ -954,8 +1179,10 @@ const EVENT = {
 	"LINE_STRING_MODIFIED": "line-string-modified",
 	"LINE_STRING_INJECTED": "line-string-injected",
 	"LINE_STRING_FLOWED": "line-string-flowed",
-    "FLOWING_LINE_STRING_STOPPED": "flowing-line-string-stopped",
-    "WORKING_ENVIRONMENT_CHANGED": "working-environment-changed"
+	"FLOWING_LINE_STRING_STOPPED": "flowing-line-string-stopped",
+	"WORKING_ENVIRONMENT_CHANGED": "working-environment-changed",
+	"COMMAND_LINE_INTERFACE_ENDED": "command-line-interface-ended",
+	"CLI_NAMESPACE_SET": "cli-namespace-set"
 };
 
 var prototypeSet = { };
@@ -973,6 +1200,6 @@ module.exports = CLI;
 
 var cli = new CLI( );
 cli
-    .adaptWorkingEnvironment( )
-    .constructCommandLineInterface( )
-    .startCommandLine( );
+	.adaptWorkingEnvironment( )
+	.constructCommandLineInterface( )
+	.startCommandLine( );
